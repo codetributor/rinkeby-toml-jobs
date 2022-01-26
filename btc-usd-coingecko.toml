@@ -1,0 +1,25 @@
+type = "directrequest"
+schemaVersion = 1
+name = "BTC-USD Coingecko"
+contractAddress = "0xD2DE9f0bBe99C7100f8456548cDDb33103122e57"
+maxTaskDuration = "0s"
+observationSource = """
+    decode_log   [type="ethabidecodelog"
+                  abi="OracleRequest(bytes32 indexed specId, address requester, bytes32 requestId, uint256 payment, address callbackAddr, bytes4 callbackFunctionId, uint256 cancelExpiration, uint256 dataVersion, bytes data)"
+                  data="$(jobRun.logData)"
+                  topics="$(jobRun.logTopics)"]
+
+    decode_cbor  [type="cborparse" data="$(decode_log.data)"]
+    fetch        [type="http" method=GET url="https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=USD"]
+    parse        [type="jsonparse" path="bitcoin,usd" data="$(fetch)"]
+    multiply     [type="multiply" input="$(parse)" times=100]
+    encode_data  [type="ethabiencode" abi="(uint256 value)" data="{ \\"value\\": $(multiply) }"]
+    encode_tx    [type="ethabiencode"
+                  abi="fulfillOracleRequest(bytes32 requestId, uint256 payment, address callbackAddress, bytes4 callbackFunctionId, uint256 expiration, bytes32 data)"
+                  data="{\\"requestId\\": $(decode_log.requestId), \\"payment\\": $(decode_log.payment), \\"callbackAddress\\": $(decode_log.callbackAddr), \\"callbackFunctionId\\": $(decode_log.callbackFunctionId), \\"expiration\\": $(decode_log.cancelExpiration), \\"data\\": $(encode_data)}"
+                 ]
+    submit_tx    [type="ethtx" to="0xD2DE9f0bBe99C7100f8456548cDDb33103122e57" data="$(encode_tx)"]
+
+    decode_log -> decode_cbor -> fetch -> parse -> multiply -> encode_data -> encode_tx -> submit_tx
+"""
+externalJobID = "a8394f5e-772a-487a-8c1f-9e34aef13274"
